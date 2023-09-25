@@ -203,4 +203,4 @@ with gr.Blocks(css=css) as app:
 app.queue(max_size=20)
 
 if __name__ == "__main__":
-    app.launch()
+    app.launch(max_threads=120)
