@@ -1,9 +1,11 @@
 diffusers
 transformers
 accelerate
-torch
 xformers
 gradio
 Pillow
 qrcode
 filelock
+
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch

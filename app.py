@@ -1,5 +1,4 @@
 import torch
-import os
 import gradio as gr
 from PIL import Image
 import random
@@ -31,11 +30,13 @@ main_pipe = StableDiffusionControlNetPipeline.from_pretrained(
     safety_checker=None,
     torch_dtype=torch.float16,
 ).to("cuda")
+
 #main_pipe.unet = torch.compile(main_pipe.unet, mode="reduce-overhead", fullgraph=True)
 #main_pipe.unet.to(memory_format=torch.channels_last)
 #main_pipe.unet = torch.compile(main_pipe.unet, mode="reduce-overhead", fullgraph=True)
 #model_id = "stabilityai/sd-x2-latent-upscaler"
-image_pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(BASE_MODEL, unet=main_pipe.unet, vae=vae, controlnet=controlnet, safety_checker=None, torch_dtype=torch.float16).to("cuda")
+image_pipe = StableDiffusionControlNetImg2ImgPipeline(**main_pipe.components)
+
 #image_pipe.unet = torch.compile(image_pipe.unet, mode="reduce-overhead", fullgraph=True)
 #upscaler = StableDiffusionLatentUpscalePipeline.from_pretrained(model_id, torch_dtype=torch.float16)
 #upscaler.to("cuda")
@@ -110,9 +111,11 @@ def inference(
 
     # Rest of your existing code
     control_image_small = center_crop_resize(control_image)
+    control_image_large = center_crop_resize(control_image, (1024, 1024))
+
     main_pipe.scheduler = SAMPLER_MAP[sampler](main_pipe.scheduler.config)
     my_seed = random.randint(0, 2**32 - 1) if seed == -1 else seed
-    generator = torch.manual_seed(my_seed)
+    generator = torch.Generator(device="cuda").manual_seed(my_seed)
     
     out = main_pipe(
         prompt=prompt,
@@ -126,7 +129,6 @@ def inference(
         num_inference_steps=15,
         output_type="latent"
     )
-    control_image_large = center_crop_resize(control_image, (1024, 1024))
     upscaled_latents = upscale(out, "nearest-exact", 2)
     out_image = image_pipe(
         prompt=prompt,
