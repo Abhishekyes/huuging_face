@@ -200,22 +200,22 @@ with gr.Blocks(css=css) as app:
         check_prompt,
         inputs=[prompt],
         queue=False
-    ).then(
+    ).success(
         inference,
         inputs=[control_image, prompt, negative_prompt, guidance_scale, controlnet_conditioning_scale, control_start, control_end, strength, seed, sampler],
         outputs=[result_image, share_group, used_seed]
-    ).then(
+    ).success(
         fn=fetch_gallery_history, inputs=[prompt, result_image], outputs=history, queue=False
     )
     run_btn.click(
         check_prompt,
         inputs=[prompt],
         queue=False
-    ).then(
+    ).success(
         inference,
         inputs=[control_image, prompt, negative_prompt, guidance_scale, controlnet_conditioning_scale, control_start, control_end, strength, seed, sampler],
         outputs=[result_image, share_group, used_seed]
-    ).then(
+    ).success(
         fn=fetch_gallery_history, inputs=[prompt, result_image], outputs=history, queue=False
     )
     share_button.click(None, [], [], _js=share_js)
