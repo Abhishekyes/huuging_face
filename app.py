@@ -187,8 +187,8 @@ with gr.Blocks(css=css) as app:
             control_image = gr.Image(label="Input Illusion", type="pil", elem_id="control_image")
             controlnet_conditioning_scale = gr.Slider(minimum=0.0, maximum=5.0, step=0.01, value=0.8, label="Illusion strength", elem_id="illusion_strength", info="ControlNet conditioning scale")
             gr.Examples(examples=["checkers.png", "checkers_mid.jpg", "pattern.png", "ultra_checkers.png", "spiral.jpeg", "funky.jpeg" ], inputs=control_image)
-            prompt = gr.Textbox(label="Prompt", elem_id="prompt")
-            negative_prompt = gr.Textbox(label="Negative Prompt", value="low quality", elem_id="negative_prompt")
+            prompt = gr.Textbox(label="Prompt", elem_id="prompt", info="Type what you want to generate", placeholder="Medieval village scene with busy streets and castle in the distance")
+            negative_prompt = gr.Textbox(label="Negative Prompt", info="Type what you don't want to see", value="low quality", elem_id="negative_prompt")
             with gr.Accordion(label="Advanced Options", open=False):
                 guidance_scale = gr.Slider(minimum=0.0, maximum=50.0, step=0.25, value=7.5, label="Guidance Scale")
                 sampler = gr.Dropdown(choices=list(SAMPLER_MAP.keys()), value="Euler")
