@@ -13,6 +13,7 @@ from diffusers import (
     DPMSolverMultistepScheduler,  # <-- Added import
     EulerDiscreteScheduler  # <-- Added import
 )
+import time
 from share_btn import community_icon_html, loading_icon_html, share_js
 from gallery_history import fetch_gallery_history, show_gallery_history
 from illusion_style import css
@@ -89,6 +90,10 @@ def upscale(samples, upscale_method, scale_by):
         s = common_upscale(samples["images"], width, height, upscale_method, "disabled")
         return (s)
 
+def check_prompt(prompt: str):
+    if prompt is None or prompt == "":
+        raise gr.Error("Prompt is required")
+        
 # Inference function
 def inference(
     control_image: Image.Image,
@@ -103,8 +108,10 @@ def inference(
     sampler = "DPM++ Karras SDE",
     progress = gr.Progress(track_tqdm=True)
 ):
-    if prompt is None or prompt == "":
-        raise gr.Error("Prompt is required")
+    start_time = time.time()
+    start_time_struct = time.localtime(start_time)
+    start_time_formatted = time.strftime("%H:%M:%S", start_time_struct)
+    print(f"Inference started at {start_time_formatted}")
     
     # Generate the initial image
     #init_image = init_pipe(prompt).images[0]
@@ -143,6 +150,10 @@ def inference(
         control_guidance_end=float(control_guidance_end),
         controlnet_conditioning_scale=float(controlnet_conditioning_scale)
     )
+    end_time = time.time()
+    end_time_struct = time.localtime(end_time)
+    end_time_formatted = time.strftime("%H:%M:%S", end_time_struct)
+    print(f"Inference ended at {end_time_formatted}, taking {end_time-start_time}s")
     return out_image["images"][0], gr.update(visible=True), my_seed
         
     #return out
@@ -186,6 +197,10 @@ with gr.Blocks(css=css) as app:
 
     history = show_gallery_history()
     prompt.submit(
+        check_prompt,
+        inputs=[prompt],
+        queue=False
+    ).then(
         inference,
         inputs=[control_image, prompt, negative_prompt, guidance_scale, controlnet_conditioning_scale, control_start, control_end, strength, seed, sampler],
         outputs=[result_image, share_group, used_seed]
@@ -193,6 +208,10 @@ with gr.Blocks(css=css) as app:
         fn=fetch_gallery_history, inputs=[prompt, result_image], outputs=history, queue=False
     )
     run_btn.click(
+        check_prompt,
+        inputs=[prompt],
+        queue=False
+    ).then(
         inference,
         inputs=[control_image, prompt, negative_prompt, guidance_scale, controlnet_conditioning_scale, control_start, control_end, strength, seed, sampler],
         outputs=[result_image, share_group, used_seed]
@@ -203,4 +222,4 @@ with gr.Blocks(css=css) as app:
 app.queue(max_size=20)
 
 if __name__ == "__main__":
-    app.launch(max_threads=120)
+    app.launch(max_threads=240)
