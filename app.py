@@ -206,7 +206,7 @@ with gr.Blocks(css=css) as app:
                 share_button = gr.Button("Share to community", elem_id="share-btn")
 
     history = show_gallery_history()
-    prompt.click(
+    prompt.submit(
         check_inputs,
         inputs=[prompt, control_image],
         queue=False
