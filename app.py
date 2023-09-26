@@ -1,5 +1,6 @@
 import torch
 import gradio as gr
+from gradio import processing_utils, utils
 from PIL import Image
 import random
 from diffusers import (
@@ -95,7 +96,15 @@ def check_inputs(prompt: str, control_image: Image.Image):
         raise gr.Error("Please select or upload an Input Illusion")
     if prompt is None or prompt == "":
         raise gr.Error("Prompt is required")
-        
+
+def convert_to_pil(base64_image):
+    pil_image = processing_utils.decode_base64_to_image(base64_image)
+    return pil_image
+
+def convert_to_base64(pil_image):
+    base64_image = processing_utils.encode_pil_to_base64(pil_image)
+    return base64_image
+
 # Inference function
 def inference(
     control_image: Image.Image,
@@ -156,10 +165,8 @@ def inference(
     end_time_struct = time.localtime(end_time)
     end_time_formatted = time.strftime("%H:%M:%S", end_time_struct)
     print(f"Inference ended at {end_time_formatted}, taking {end_time-start_time}s")
-    return out_image["images"][0], gr.update(visible=True), my_seed
+    return out_image["images"][0], gr.update(visible=True), gr.update(visible=True), my_seed
         
-    #return out
-
 with gr.Blocks(css=css) as app:
     gr.Markdown(
         '''
@@ -173,7 +180,8 @@ with gr.Blocks(css=css) as app:
         Given a prompt and your pattern, we use a QR code conditioned controlnet to create a stunning illusion! Credit to: [MrUgleh](https://twitter.com/MrUgleh) for discovering the workflow :)
         '''
     )
-    
+    state_img_input = gr.State()
+    state_img_output = gr.State()
     with gr.Row():
         with gr.Column():
             control_image = gr.Image(label="Input Illusion", type="pil", elem_id="control_image")
@@ -198,14 +206,26 @@ with gr.Blocks(css=css) as app:
                 share_button = gr.Button("Share to community", elem_id="share-btn")
 
     history = show_gallery_history()
-    prompt.submit(
+    prompt.click(
         check_inputs,
         inputs=[prompt, control_image],
         queue=False
     ).success(
+        convert_to_pil,
+        inputs=[control_image],
+        outputs=[state_img_input],
+        queue=False,
+        preprocess=Falgse,
+    ).success(
         inference,
-        inputs=[control_image, prompt, negative_prompt, guidance_scale, controlnet_conditioning_scale, control_start, control_end, strength, seed, sampler],
-        outputs=[result_image, share_group, used_seed]
+        inputs=[state_img_input, prompt, negative_prompt, guidance_scale, controlnet_conditioning_scale, control_start, control_end, strength, seed, sampler],
+        outputs=[state_img_output, result_image, share_group, used_seed]
+    ).success(
+        convert_to_base64,
+        inputs=[state_img_output],
+        outputs=[result_image],
+        queue=False,
+        postprocess=False
     ).success(
         fn=fetch_gallery_history, inputs=[prompt, result_image], outputs=history, queue=False
     )
@@ -214,9 +234,21 @@ with gr.Blocks(css=css) as app:
         inputs=[prompt, control_image],
         queue=False
     ).success(
+        convert_to_pil,
+        inputs=[control_image],
+        outputs=[state_img_input],
+        queue=False,
+        preprocess=False,
+    ).success(
         inference,
-        inputs=[control_image, prompt, negative_prompt, guidance_scale, controlnet_conditioning_scale, control_start, control_end, strength, seed, sampler],
-        outputs=[result_image, share_group, used_seed]
+        inputs=[state_img_input, prompt, negative_prompt, guidance_scale, controlnet_conditioning_scale, control_start, control_end, strength, seed, sampler],
+        outputs=[state_img_output, result_image, share_group, used_seed]
+    ).success(
+        convert_to_base64,
+        inputs=[state_img_output],
+        outputs=[result_image],
+        queue=False,
+        postprocess=False
     ).success(
         fn=fetch_gallery_history, inputs=[prompt, result_image], outputs=history, queue=False
     )
@@ -224,4 +256,4 @@ with gr.Blocks(css=css) as app:
 app.queue(max_size=20)
 
 if __name__ == "__main__":
-    app.launch(max_threads=240)
+    app.launch(max_threads=400)
