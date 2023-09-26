@@ -215,7 +215,7 @@ with gr.Blocks(css=css) as app:
         inputs=[control_image],
         outputs=[state_img_input],
         queue=False,
-        preprocess=Falgse,
+        preprocess=False,
     ).success(
         inference,
         inputs=[state_img_input, prompt, negative_prompt, guidance_scale, controlnet_conditioning_scale, control_start, control_end, strength, seed, sampler],
