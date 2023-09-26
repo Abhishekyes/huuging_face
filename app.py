@@ -90,7 +90,9 @@ def upscale(samples, upscale_method, scale_by):
         s = common_upscale(samples["images"], width, height, upscale_method, "disabled")
         return (s)
 
-def check_prompt(prompt: str):
+def check_inputs(prompt: str, control_image: Image.Image):
+    if control_image is None:
+        raise gr.Error("Please select or upload an Input Illusion")
     if prompt is None or prompt == "":
         raise gr.Error("Prompt is required")
         
@@ -197,8 +199,8 @@ with gr.Blocks(css=css) as app:
 
     history = show_gallery_history()
     prompt.submit(
-        check_prompt,
-        inputs=[prompt],
+        check_inputs,
+        inputs=[prompt, control_image],
         queue=False
     ).success(
         inference,
@@ -208,8 +210,8 @@ with gr.Blocks(css=css) as app:
         fn=fetch_gallery_history, inputs=[prompt, result_image], outputs=history, queue=False
     )
     run_btn.click(
-        check_prompt,
-        inputs=[prompt],
+        check_inputs,
+        inputs=[prompt, control_image],
         queue=False
     ).success(
         inference,
