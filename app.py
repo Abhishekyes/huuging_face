@@ -16,7 +16,7 @@ from diffusers import (
 )
 import time
 from share_btn import community_icon_html, loading_icon_html, share_js
-from gallery_history import fetch_gallery_history, show_gallery_history
+import user_history
 from illusion_style import css
 
 BASE_MODEL = "SG161222/Realistic_Vision_V5.1_noVAE"
@@ -117,7 +117,8 @@ def inference(
     upscaler_strength: float = 0.5,
     seed: int = -1,
     sampler = "DPM++ Karras SDE",
-    progress = gr.Progress(track_tqdm=True)
+    progress = gr.Progress(track_tqdm=True),
+    profile: gr.OAuthProfile | None = None,
 ):
     start_time = time.time()
     start_time_struct = time.localtime(start_time)
@@ -165,9 +166,28 @@ def inference(
     end_time_struct = time.localtime(end_time)
     end_time_formatted = time.strftime("%H:%M:%S", end_time_struct)
     print(f"Inference ended at {end_time_formatted}, taking {end_time-start_time}s")
+
+    # Save image + metadata
+    user_history.save_image(
+        label=prompt,
+        image=out_image["images"][0],
+        profile=profile,
+        metadata={
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "guidance_scale": guidance_scale,
+            "controlnet_conditioning_scale": controlnet_conditioning_scale,
+            "control_guidance_start": control_guidance_start,
+            "control_guidance_end": control_guidance_end,
+            "upscaler_strength": upscaler_strength,
+            "seed": seed,
+            "sampler": sampler,
+        },
+    )
+
     return out_image["images"][0], gr.update(visible=True), gr.update(visible=True), my_seed
         
-with gr.Blocks(css=css) as app:
+with gr.Blocks() as app:
     gr.Markdown(
         '''
         <center><h1>Illusion Diffusion HQ 🌀</h1></span>  
@@ -205,7 +225,6 @@ with gr.Blocks(css=css) as app:
                 loading_icon = gr.HTML(loading_icon_html)
                 share_button = gr.Button("Share to community", elem_id="share-btn")
 
-    history = show_gallery_history()
     prompt.submit(
         check_inputs,
         inputs=[prompt, control_image],
@@ -226,8 +245,6 @@ with gr.Blocks(css=css) as app:
         outputs=[result_image],
         queue=False,
         postprocess=False
-    ).success(
-        fn=fetch_gallery_history, inputs=[prompt, result_image], outputs=history, queue=False
     )
     run_btn.click(
         check_inputs,
@@ -249,11 +266,16 @@ with gr.Blocks(css=css) as app:
         outputs=[result_image],
         queue=False,
         postprocess=False
-    ).success(
-        fn=fetch_gallery_history, inputs=[prompt, result_image], outputs=history, queue=False
     )
     share_button.click(None, [], [], _js=share_js)
-app.queue(max_size=20)
+
+with gr.Blocks(css=css) as app_with_history:
+    with gr.Tab("Demo"):
+        app.render()
+    with gr.Tab("Past generations"):
+        user_history.render()
+
+app_with_history.queue(max_size=20)
 
 if __name__ == "__main__":
-    app.launch(max_threads=400)
+    app_with_history.launch(max_threads=400)
