@@ -15,7 +15,6 @@ Useful links:
 - Source file: https://huggingface.co/spaces/Wauplin/gradio-user-history/blob/main/user_history.py
 - Discussions: https://huggingface.co/spaces/Wauplin/gradio-user-history/discussions
 """
-import hashlib
 import json
 import os
 import shutil
@@ -37,12 +36,6 @@ def setup(folder_path: str | Path | None = None) -> None:
     user_history = _UserHistory()
     user_history.folder_path = _resolve_folder_path(folder_path)
     user_history.initialized = True
-
-    # Clean duplicates
-    try:
-        _clean_duplicates()
-    except Exception as e:
-        print(f"Failed to clean duplicates: {e}")
 
 
 def render() -> None:
@@ -428,66 +421,3 @@ def _fetch_admins() -> List[str]:
     if response.status_code == 200:
         return sorted((member["user"] for member in response.json()), key=lambda x: x.lower())
     return [namespace]
-
-
-#######
-#######
-
-# TODO: remove this once from IllusionDiffusion once cleaned
-
-
-def _clean_duplicates() -> None:
-    user_history = _UserHistory()
-    if not (user_history.initialized and user_history.folder_path.exists()):
-        # Must be initialized correctly
-        return
-
-    _lock = user_history.folder_path / "_clean_duplicates.lock"
-    _is_done_file = user_history.folder_path / "_clean_duplicates_is_done"  # Only 1 replica will do it, once for all
-
-    with FileLock(_lock):
-        if _is_done_file.exists():  # if True, another replica already did it
-            return
-
-        for subpath in user_history.folder_path.iterdir():
-            if subpath.is_file():
-                continue
-
-            history_file = subpath / "history.jsonl"
-            if not history_file.exists():
-                continue
-
-            # Read history
-            images = [json.loads(line) for line in history_file.read_text().splitlines()]
-
-            # Select unique images
-            curated_images = []
-            seen_hashes = set()
-            seen_paths = set()
-            for image in images:
-                image_hash = _file_hash(Path(image["path"]))
-                if image_hash is None:
-                    continue
-                if image_hash in seen_hashes:
-                    continue
-                seen_hashes.add(image_hash)
-                seen_paths.add(Path(image["path"]))
-                curated_images.append(image)
-
-            # Remove duplicates + save history
-            for path in subpath.glob("images/*"):
-                if path not in seen_paths:
-                    try:
-                        path.unlink()
-                    except OSError:
-                        pass
-            history_file.write_text("\n".join(json.dumps(image) for image in curated_images))
-
-        _is_done_file.touch()
-
-
-def _file_hash(path: Path) -> str | None:
-    """Return the hash of a file. No need to read by chunks."""
-    if path.is_file():
-        return hashlib.md5(path.read_bytes()).hexdigest()
-    return None

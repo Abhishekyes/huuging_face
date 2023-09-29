@@ -19,8 +19,6 @@ from share_btn import community_icon_html, loading_icon_html, share_js
 import user_history
 from illusion_style import css
 
-user_history.setup()
-
 BASE_MODEL = "SG161222/Realistic_Vision_V5.1_noVAE"
 
 # Initialize both pipelines
