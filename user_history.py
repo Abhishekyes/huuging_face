@@ -15,6 +15,7 @@ Useful links:
 - Source file: https://huggingface.co/spaces/Wauplin/gradio-user-history/blob/main/user_history.py
 - Discussions: https://huggingface.co/spaces/Wauplin/gradio-user-history/discussions
 """
+import hashlib
 import json
 import os
 import shutil
@@ -37,8 +38,11 @@ def setup(folder_path: str | Path | None = None) -> None:
     user_history.folder_path = _resolve_folder_path(folder_path)
     user_history.initialized = True
 
-    # TODO: remove this section once all Spaces have migrated
-    _migrate_history()
+    # Clean duplicates
+    try:
+        _clean_duplicates()
+    except Exception as e:
+        print(f"Failed to clean duplicates: {e}")
 
 
 def render() -> None:
@@ -46,9 +50,7 @@ def render() -> None:
 
     # initialize with default config
     if not user_history.initialized:
-        print(
-            "Initializing user history with default config. Use `user_history.setup(...)` to customize folder_path."
-        )
+        print("Initializing user history with default config. Use `user_history.setup(...)` to customize folder_path.")
         setup()
 
     # Render user history tab
@@ -83,18 +85,11 @@ def render() -> None:
 
     # "Export zip" row (hidden by default)
     with gr.Row():
-        export_file = gr.File(
-            file_count="single",
-            file_types=[".zip"],
-            label="Exported history",
-            visible=False,
-        )
+        export_file = gr.File(file_count="single", file_types=[".zip"], label="Exported history", visible=False)
 
     # "Config deletion" row (hidden by default)
     with gr.Row():
-        confirm_button = gr.Button(
-            "Confirm delete all history", variant="stop", visible=False
-        )
+        confirm_button = gr.Button("Confirm delete all history", variant="stop", visible=False)
         cancel_button = gr.Button("Cancel", visible=False)
 
     # Gallery
@@ -117,12 +112,8 @@ def render() -> None:
     gallery.attach_load_event(_fetch_user_history, every=None)
 
     # Interactions
-    refresh_button.click(
-        fn=_fetch_user_history, inputs=[], outputs=[gallery], queue=False
-    )
-    export_button.click(
-        fn=_export_user_history, inputs=[], outputs=[export_file], queue=False
-    )
+    refresh_button.click(fn=_fetch_user_history, inputs=[], outputs=[gallery], queue=False)
+    export_button.click(fn=_export_user_history, inputs=[], outputs=[export_file], queue=False)
 
     # Taken from https://github.com/gradio-app/gradio/issues/3324#issuecomment-1446382045
     delete_button.click(
@@ -203,9 +194,7 @@ class _UserHistory(object):
 
     def _user_lock(self, username: str) -> FileLock:
         """Ensure history is not corrupted if concurrent calls."""
-        return FileLock(
-            self.folder_path / f"{username}.lock"
-        )  # lock outside of folder => better when exporting ZIP
+        return FileLock(self.folder_path / f"{username}.lock")  # lock outside of folder => better when exporting ZIP
 
     def _user_jsonl_path(self, username: str) -> Path:
         return self._user_path(username) / "history.jsonl"
@@ -225,9 +214,7 @@ def _fetch_user_history(profile: gr.OAuthProfile | None) -> List[Tuple[str, str]
 
     user_history = _UserHistory()
     if not user_history.initialized:
-        warnings.warn(
-            "User history is not set in Gradio demo. You must use `user_history.render(...)` first."
-        )
+        warnings.warn("User history is not set in Gradio demo. You must use `user_history.render(...)` first.")
         return []
 
     with user_history._user_lock(username):
@@ -253,17 +240,13 @@ def _export_user_history(profile: gr.OAuthProfile | None) -> Dict | None:
 
     user_history = _UserHistory()
     if not user_history.initialized:
-        warnings.warn(
-            "User history is not set in Gradio demo. You must use `user_history.render(...)` first."
-        )
+        warnings.warn("User history is not set in Gradio demo. You must use `user_history.render(...)` first.")
         return None
 
     # Zip history
     with user_history._user_lock(username):
         path = shutil.make_archive(
-            str(_archives_path() / f"history_{username}"),
-            "zip",
-            user_history._user_path(username),
+            str(_archives_path() / f"history_{username}"), "zip", user_history._user_path(username)
         )
 
     return gr.update(visible=True, value=path)
@@ -278,9 +261,7 @@ def _delete_user_history(profile: gr.OAuthProfile | None) -> None:
 
     user_history = _UserHistory()
     if not user_history.initialized:
-        warnings.warn(
-            "User history is not set in Gradio demo. You must use `user_history.render(...)` first."
-        )
+        warnings.warn("User history is not set in Gradio demo. You must use `user_history.render(...)` first.")
         return
 
     with user_history._user_lock(username):
@@ -317,9 +298,7 @@ def _resolve_folder_path(folder_path: str | Path | None) -> Path:
     if folder_path is not None:
         return Path(folder_path).expanduser().resolve()
 
-    if os.getenv("SYSTEM") == "spaces" and os.path.exists(
-        "/data"
-    ):  # Persistent storage is enabled!
+    if os.getenv("SYSTEM") == "spaces" and os.path.exists("/data"):  # Persistent storage is enabled!
         return Path("/data") / "_user_history"
 
     # Not in a Space or Persistent storage not enabled => local folder
@@ -380,10 +359,8 @@ def _get_nb_users() -> int:
     user_history = _UserHistory()
     if not user_history.initialized:
         return 0
-    if user_history.folder_path is not None:
-        return len(
-            [path for path in user_history.folder_path.iterdir() if path.is_dir()]
-        )
+    if user_history.folder_path is not None and user_history.folder_path.exists():
+        return len([path for path in user_history.folder_path.iterdir() if path.is_dir()])
     return 0
 
 
@@ -391,7 +368,7 @@ def _get_nb_images() -> int:
     user_history = _UserHistory()
     if not user_history.initialized:
         return 0
-    if user_history.folder_path is not None:
+    if user_history.folder_path is not None and user_history.folder_path.exists():
         return len([path for path in user_history.folder_path.glob("*/images/*")])
     return 0
 
@@ -425,14 +402,10 @@ def _disk_space_warning_message() -> str:
 
 
 def _get_disk_usage(path: Path) -> Tuple[int, int, int]:
-    for path in [path] + list(
-        path.parents
-    ):  # first check target_dir, then each parents one by one
+    for path in [path] + list(path.parents):  # first check target_dir, then each parents one by one
         try:
             return shutil.disk_usage(path)
-        except (
-            OSError
-        ):  # if doesn't exist or can't read => fail silently and try parent one
+        except OSError:  # if doesn't exist or can't read => fail silently and try parent one
             pass
     return 0, 0, 0
 
@@ -451,74 +424,70 @@ def _fetch_admins() -> List[str]:
     # Running in Space => try to fetch organization members
     # Otherwise, it's not an organization => namespace is the user
     namespace = space_id.split("/")[0]
-    response = requests.get(
-        f"https://huggingface.co/api/organizations/{namespace}/members"
-    )
+    response = requests.get(f"https://huggingface.co/api/organizations/{namespace}/members")
     if response.status_code == 200:
-        return sorted(
-            (member["user"] for member in response.json()), key=lambda x: x.lower()
-        )
+        return sorted((member["user"] for member in response.json()), key=lambda x: x.lower())
     return [namespace]
 
 
-################################################################
-# Legacy helpers to migrate image structure to new data format #
-################################################################
-# TODO: remove this section once all Spaces have migrated
+#######
+#######
+
+# TODO: remove this once from IllusionDiffusion once cleaned
 
 
-def _migrate_history():
-    """Script to migrate user history from v0 to v1."""
-    legacy_history_path = _legacy_get_history_folder_path()
-    if not legacy_history_path.exists():
+def _clean_duplicates() -> None:
+    user_history = _UserHistory()
+    if not (user_history.initialized and user_history.folder_path.exists()):
+        # Must be initialized correctly
         return
 
-    error_count = 0
-    for json_path in legacy_history_path.glob("*.json"):
-        username = json_path.stem
-        print(f"Migrating history for user {username}...")
-        error_count += _legacy_move_user_history(username)
-        print("Done.")
-    print(f"Migration complete. {error_count} error(s) happened.")
+    _lock = user_history.folder_path / "_clean_duplicates.lock"
+    _is_done_file = user_history.folder_path / "_clean_duplicates_is_done"  # Only 1 replica will do it, once for all
 
-    if error_count == 0:
-        shutil.rmtree(legacy_history_path, ignore_errors=True)
+    with FileLock(_lock):
+        if _is_done_file.exists():  # if True, another replica already did it
+            return
 
+        for subpath in user_history.folder_path.iterdir():
+            if subpath.is_file():
+                continue
 
-def _legacy_move_user_history(username: str) -> int:
-    history = _legacy_read_user_history(username)
-    error_count = 0
-    for image, prompt in reversed(history):
-        try:
-            save_image(
-                label=prompt, image=image, profile={"preferred_username": username}
-            )
-        except Exception as e:
-            print("Issue while migrating image:", e)
-            error_count += 1
-    return error_count
+            history_file = subpath / "history.jsonl"
+            if not history_file.exists():
+                continue
 
+            # Read history
+            images = [json.loads(line) for line in history_file.read_text().splitlines()]
 
-def _legacy_get_history_folder_path() -> Path:
-    _folder = os.environ.get("HISTORY_FOLDER")
-    if _folder is None:
-        _folder = Path(__file__).parent / "history"
-    return Path(_folder)
+            # Select unique images
+            curated_images = []
+            seen_hashes = set()
+            seen_paths = set()
+            for image in images:
+                image_hash = _file_hash(Path(image["path"]))
+                if image_hash is None:
+                    continue
+                if image_hash in seen_hashes:
+                    continue
+                seen_hashes.add(image_hash)
+                seen_paths.add(Path(image["path"]))
+                curated_images.append(image)
 
+            # Remove duplicates + save history
+            for path in subpath.glob("images/*"):
+                if path not in seen_paths:
+                    try:
+                        path.unlink()
+                    except OSError:
+                        pass
+            history_file.write_text("\n".join(json.dumps(image) for image in curated_images))
 
-def _legacy_read_user_history(username: str) -> List[Tuple[str, str]]:
-    """Return saved history for that user."""
-    with _legacy_user_lock(username):
-        path = _legacy_user_history_path(username)
-        if path.exists():
-            return json.loads(path.read_text())
-        return []  # No history yet
-
-
-def _legacy_user_history_path(username: str) -> Path:
-    return _legacy_get_history_folder_path() / f"{username}.json"
+        _is_done_file.touch()
 
 
-def _legacy_user_lock(username: str) -> FileLock:
-    """Ensure history is not corrupted if concurrent calls."""
-    return FileLock(f"{_legacy_user_history_path(username)}.lock")
+def _file_hash(path: Path) -> str | None:
+    """Return the hash of a file. No need to read by chunks."""
+    if path.is_file():
+        return hashlib.md5(path.read_bytes()).hexdigest()
+    return None
