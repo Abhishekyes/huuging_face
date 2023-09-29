@@ -275,7 +275,7 @@ with gr.Blocks(css=css) as app_with_history:
     with gr.Tab("Past generations"):
         user_history.render()
 
-app_with_history.queue(max_size=20)
+app_with_history.queue(max_size=20,api_open=False )
 
 if __name__ == "__main__":
-    app_with_history.launch(max_threads=400, api_open=False)
+    app_with_history.launch(max_threads=400)
